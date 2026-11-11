@@ -1,0 +1,146 @@
+---
+title: "Figure 2 | Source data and plotting code"
+output:
+  html_document:
+    toc: true
+---
+
+This report accompanies Figure 2 on LSOPC intervention in the mouse model. Panels B and G are redrawn from the values used for the GraphPad Prism plots. Bars show mean ± SD, with individual observations overlaid. The report also displays the immunoblot quantification for F, the exported PCoA coordinates for H, and the exported LEfSe results for I. Keep the five Excel workbooks in the `data/` folder next to this Rmd and click **Knit** in RStudio.
+
+```{r setup, message=FALSE}
+library(readxl)
+
+groups <- c("Control", "AGEs", "L-LSOPC", "H-LSOPC")
+group_colors <- setNames(c("#D98391", "#EBA075", "#80B49E", "#6C9EBC"), groups)
+
+source_path <- function(panel) {
+  path <- file.path("data", paste0("Figure 2", panel, ".xlsx"))
+  if (!file.exists(path)) stop("Missing workbook: ", path, call. = FALSE)
+  path
+}
+
+read_block <- function(panel, range, types) {
+  read_excel(source_path(panel), range = range, col_types = types,
+             col_names = FALSE, .name_repair = function(x) paste0("V", seq_along(x)))
+}
+
+plot_grouped <- function(values, labels, ylab) {
+  # Each matrix has observations in rows and treatment groups in columns.
+  means <- vapply(values, colMeans, numeric(length(groups)))
+  sds <- vapply(values, function(x) apply(x, 2, sd), numeric(length(groups)))
+  positions <- barplot(means, beside = TRUE, names.arg = labels,
+                       col = group_colors, border = NA, ylab = ylab,
+                       ylim = c(0, 1.25 * max(means + sds, unlist(values))))
+  arrows(positions, means - sds, positions, means + sds,
+         code = 3, angle = 90, length = 0.04)
+  for (item in seq_along(values)) {
+    observations <- values[[item]]
+    offsets <- seq(-0.22, 0.22, length.out = nrow(observations))
+    for (group in seq_along(groups)) {
+      points(positions[group, item] + offsets, observations[, group],
+             pch = 21, bg = "white", cex = 0.65)
+    }
+  }
+  legend("topright", groups, fill = group_colors, border = NA,
+         bty = "n", horiz = TRUE, cex = 0.8)
+}
+
+unpack_rows <- function(block, n) {
+  lapply(seq_len(nrow(block)), function(i) {
+    matrix(as.numeric(unlist(block[i, -1], use.names = FALSE)),
+           nrow = n, ncol = length(groups))
+  })
+}
+```
+
+## Figure 2B | Organ indices
+
+[Figure 2B.xlsx](data/Figure%202B.xlsx). Each organ has eight measurements per group. The workbook label “Spieen” is displayed as “Spleen”.
+
+```{r organ-indices, fig.width=9, fig.height=4.8}
+organ <- read_block("B", "A3:AG7", c("text", rep("numeric", 32)))
+organ_names <- sub("^Spieen$", "Spleen", organ[[1]])
+plot_grouped(unpack_rows(organ, 8), organ_names, "Organ index (mg/g)")
+```
+
+## Figure 2F | Immunoblot quantification
+
+[Figure 2F.xlsx](data/Figure%202F.xlsx) contains three immunoblot quantification values per group for each of five proteins. The table below summarizes these values.
+
+```{r blot-quantification}
+blot <- read_block("F", "A3:M7", c("text", rep("numeric", 12)))
+blot_values <- unpack_rows(blot, 3)
+blot_summary <- t(vapply(blot_values, function(x) {
+  sprintf("%.3f ± %.3f", colMeans(x), apply(x, 2, sd))
+}, character(length(groups))))
+colnames(blot_summary) <- groups
+knitr::kable(data.frame(Protein = blot[[1]], blot_summary, check.names = FALSE),
+             caption = "Immunoblot quantification (mean ± SD)")
+```
+
+## Figure 2G | Relative mRNA expression
+
+[Figure 2G.xlsx](data/Figure%202G.xlsx) contains relative expression values for three targets, with three observations per group per target.
+
+```{r qpcr, fig.width=8, fig.height=4.8}
+qpcr <- read_block("G", "A3:E11", c("text", rep("numeric", 4)))
+target_start <- seq(1, nrow(qpcr), by = 3)
+qpcr_values <- lapply(target_start, function(i) {
+  as.matrix(qpcr[i + 0:2, 2:5])
+})
+plot_grouped(qpcr_values, qpcr[[1]][target_start], "Relative mRNA expression")
+```
+
+## Figure 2H | Unweighted UniFrac PCoA
+
+[Figure 2H.xlsx](data/Figure%202H.xlsx) contains exported PCoA coordinates for five samples per group and the variance explained by each axis. The scatter plot uses the exported scores directly. Group assignment is read from the sample ID prefix.
+
+The original platform export shows the group ellipses. The R redraw below uses the Excel coordinates for the sample points and the axis percentages. Recomputing the ordination requires the Unweighted UniFrac distance matrix. Reproducing the original ellipses also requires the platform's ellipse settings.
+
+```{r pcoa-original, echo=FALSE, out.width="100%", fig.cap="Figure 2H. Original Unweighted UniFrac PCoA plot with group ellipses."}
+pcoa_image <- file.path("data", "PCoA_unweighted_unifrac_ellipse.png")
+if (file.exists(pcoa_image)) {
+  knitr::include_graphics(pcoa_image)
+}
+```
+
+```{r pcoa, fig.width=7.5, fig.height=5.5}
+scores <- read_block("H", "A3:C22", c("text", "numeric", "numeric"))
+variance <- read_block("H", "A26:B27", c("text", "numeric"))
+sample_ids <- scores[[1]]
+sample_groups <- sub("[0-9]+$", "", sample_ids)
+stopifnot(all(sample_groups %in% groups))
+axis_labels <- sprintf("%s (%.2f%%)", variance[[1]], 100 * variance[[2]])
+
+plot(scores[[2]], scores[[3]], pch = 19, col = group_colors[sample_groups],
+     xlab = axis_labels[1], ylab = axis_labels[2],
+     xlim = extendrange(scores[[2]], f = 0.14),
+     ylim = extendrange(scores[[3]], f = 0.15))
+abline(h = 0, v = 0, lty = 3, col = "grey75")
+text(scores[[2]], scores[[3]], labels = sample_ids, pos = 3, cex = 0.62)
+legend("bottomleft", groups, col = group_colors, pch = 19, bty = "n", cex = 0.8)
+```
+
+## Figure 2I | LEfSe results
+
+[Figure 2I.xlsx](data/Figure%202I.xlsx) contains the exported LEfSe results at the phylum, class, order, family, and genus levels. The analysis report specifies an LDA score cutoff of 2. The tables below give the taxonomy, group code, LDA score, P value, and adjusted P value for each reported taxon. Group codes A–D match the exported cladogram legend.
+
+The cladogram is the original analysis output. The workbook documents the highlighted taxa and their scores. Re-running LEfSe requires the original abundance data and sample group assignments.
+
+```{r lefse-cladogram, echo=FALSE, out.width="100%", fig.cap="Figure 2I. Original LEfSe cladogram (LDA score cutoff of 2)."}
+cladogram_path <- file.path("data", "LDA_2_cladogram.png")
+if (file.exists(cladogram_path)) {
+  knitr::include_graphics(cladogram_path)
+}
+```
+
+```{r lefse, results='asis'}
+lefse_path <- source_path("I")
+for (sheet in excel_sheets(lefse_path)) {
+  if (!endsWith(sheet, ".LDA")) next
+  cat("\n\n### ", sub("\\.LDA$", "", sheet), "\n\n", sep = "")
+  results <- read_excel(lefse_path, sheet = sheet)
+  print(knitr::kable(results, digits = 5))
+  cat("\n\n")
+}
+```

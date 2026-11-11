@@ -1,0 +1,160 @@
+---
+title: "Figure 1 | Source data and plotting code"
+output:
+  html_document:
+    toc: true
+---
+
+This report redraws the quantitative plots in the revised Figure 1A–E from the supplied Excel workbooks. The manuscript plots were prepared in Origin (A, B and D) and GraphPad Prism (C and E). The R code uses the supplied data and fitted values to regenerate the plots. For each workbook link to work, keep the original filename and place the workbook in the `data` folder beside this Rmd.
+
+To render in RStudio, install the packages once with `install.packages(c("readxl", "rmarkdown"))`, open `fig1.Rmd`, and click **Knit**.
+
+```{r setup, message=FALSE, fig.width=8, fig.height=5}
+library(readxl)
+
+read_cells <- function(file, range) {
+  path <- file.path("data", file)
+  if (!file.exists(path)) stop("Missing source workbook: ", path)
+  read_excel(path, range = range, col_names = FALSE, col_types = "text",
+             .name_repair = function(names) paste0("column_", seq_along(names)))
+}
+
+numeric_matrix <- function(cells) {
+  values <- as.matrix(cells)
+  matrix(as.numeric(values), nrow = nrow(values), ncol = ncol(values))
+}
+
+plot_series <- function(x, y, labels, title, xlab, ylab, type = "l", ...) {
+  colors <- hcl.colors(ncol(y), "Dark 3")
+  matplot(x, y, type = type, lty = 1, lwd = 1.3, col = colors,
+          main = title, xlab = xlab, ylab = ylab, ...)
+  legend("topright", labels, col = colors, lty = 1, bty = "n", cex = 0.72)
+}
+
+plot_titrations <- function(cells, groups, ylab) {
+  for (group in names(groups)) {
+    columns <- groups[[group]]
+    labels <- unlist(cells[1, columns], use.names = FALSE)
+    if (all(!grepl("M", labels, fixed = TRUE))) labels <- paste(labels, "µM")
+    plot_series(as.numeric(cells[-1, 1, drop = TRUE]),
+                numeric_matrix(cells[-1, columns]), labels, group,
+                "Wavelength (nm)", ylab)
+  }
+}
+```
+
+## Figure 1A | UV–Vis absorption spectra
+
+[Figure 1A.xlsx](data/Figure%201A.xlsx). The three concentration series share a wavelength column.
+
+```{r uv-vis}
+uv <- read_cells("Figure 1A.xlsx", "A3:R404")
+plot_titrations(uv, list(LSOPC = 2:8, `OLP-AGEs` = 9:14, CC = 15:18),
+                 "Absorbance")
+```
+
+## Figure 1B | FTIR spectra and secondary structure
+
+[Figure 1B.xlsx](data/Figure%201B.xlsx). The first block is headed “Second-derivative spectra” in the workbook, while its x-column is labeled “Wavelength (nm)”. Verify the axis unit and spectral processing against the original Origin project before using this redraw in the manuscript. The plot below displays the supplied values directly. The second block contains secondary structure percentages.
+
+```{r ftir}
+ftir_file <- "Figure 1B.xlsx"
+ftir <- read_cells(ftir_file, "A3:E7160")
+conditions <- unlist(ftir[1, 2:5], use.names = FALSE)
+plot_series(as.numeric(ftir[-1, 1, drop = TRUE]),
+            numeric_matrix(ftir[-1, 2:5]), conditions,
+            "FTIR spectra", "Spectral coordinate (as supplied)",
+            "Spectral signal (as supplied)", xlim = c(4000, 550))
+
+structure <- read_cells(ftir_file, "F4:J7")
+barplot(t(numeric_matrix(structure[, 2:5])), beside = TRUE,
+        names.arg = structure[[1]], legend.text = conditions,
+        args.legend = list(x = "topright", bty = "n", cex = 0.68),
+        col = hcl.colors(4, "Dark 3"), ylim = c(0, 55),
+        ylab = "Secondary structure content (%)")
+```
+
+## Figure 1C | ELISA binding and competition
+
+[Figure 1C.xlsx](data/Figure%201C.xlsx). The plots show mean ± SD and the three values supplied for each condition. RO and ROC are the group labels used in the competition data block.
+
+```{r elisa}
+plot_replicates <- function(values, labels, title) {
+  means <- rowMeans(values)
+  sds <- apply(values, 1, sd)
+  positions <- barplot(means, names.arg = labels, main = title,
+                       ylab = "Binding (%)", col = "grey85",
+                       ylim = c(0, 1.15 * max(values, means + sds)))
+  arrows(positions, means - sds, positions, means + sds,
+         angle = 90, code = 3, length = 0.06)
+  for (group in seq_along(positions)) {
+    points(positions[group] + seq(-0.10, 0.10, length.out = ncol(values)),
+           values[group, ], pch = 16, cex = 0.8)
+  }
+}
+
+elisa_file <- "Figure 1C.xlsx"
+binding <- read_cells(elisa_file, "A3:G5")
+plot_replicates(numeric_matrix(binding[, 2:4]), binding[[1]],
+                "Direct binding at 12 µg/mL")
+plot_replicates(numeric_matrix(binding[, 5:7]), binding[[1]],
+                "Direct binding at 24 µg/mL")
+
+competition <- read_cells(elisa_file, "A8:D9")
+plot_replicates(numeric_matrix(competition[, 2:4]), competition[[1]],
+                "CC competition at 12 µg/mL")
+```
+
+## Figure 1D | Fluorescence quenching
+
+[Figure 1D.xlsx](data/Figure%201D.xlsx). The workbook contains emission spectra, quenching rates and F/F0 values. The group abbreviations below follow the workbook.
+
+```{r fluorescence}
+fluor_file <- "Figure 1D.xlsx"
+emission <- read_cells(fluor_file, "A3:AK134")
+plot_titrations(emission, list(RL = 2:10, RC = 11:19, RO = 20:28, RLO = 29:37),
+                 "Fluorescence intensity (a.u.)")
+
+quenching <- read_cells(fluor_file, "AL3:AP10")
+quenching_groups <- unlist(quenching[1, 2:5], use.names = FALSE)
+barplot(t(numeric_matrix(quenching[-1, 2:5])), beside = TRUE,
+        names.arg = sub(" .*", "", quenching[-1, 1, drop = TRUE]),
+        legend.text = quenching_groups,
+        args.legend = list(x = "topleft", bty = "n", cex = 0.8),
+        col = hcl.colors(4, "Dark 3"), ylim = c(0, 58),
+        xlab = "Concentration (µM)", ylab = "Quenching rate (%)")
+
+ratio <- read_cells(fluor_file, "AL13:AN28")
+plot_series(as.numeric(ratio[-1, 1, drop = TRUE]),
+            numeric_matrix(ratio[-1, 2:3]),
+            unlist(ratio[1, 2:3], use.names = FALSE),
+            "Relative fluorescence", "Titration value (as supplied)",
+            expression(F/F[0]), type = "b")
+```
+
+## Figure 1E | SPR kinetics
+
+[Figure 1E.xlsx](data/Figure%201E.xlsx). Solid lines show the supplied response traces and dashed lines show the fitted values from the workbook. Some response and fit entries extend beyond the shared time column. The plots use only rows with recorded time coordinates. The supplied kinetic workbook covers sensorgrams and fitted traces.
+
+```{r spr}
+spr <- read_cells("Figure 1E.xlsx", "A3:AK5546")
+spr_values <- numeric_matrix(spr[-1, ])
+spr_values <- spr_values[is.finite(spr_values[, 1]), , drop = FALSE]
+time <- spr_values[, 1]
+ligand_columns <- list(LSOPC = seq(2, 16, by = 2),
+                       CC = seq(18, 26, by = 2),
+                       `OLP-AGEs` = seq(28, 36, by = 2))
+
+for (ligand in names(ligand_columns)) {
+  columns <- ligand_columns[[ligand]]
+  measured <- spr_values[, columns, drop = FALSE]
+  fitted <- spr_values[, columns + 1, drop = FALSE]
+  colors <- hcl.colors(length(columns), "Dark 3")
+  matplot(time, measured, type = "l", col = colors, lty = 1,
+          ylim = range(c(measured, fitted), na.rm = TRUE),
+          main = ligand, xlab = "Time (s)", ylab = "Response (RU)")
+  matlines(time, fitted, col = colors, lty = 2)
+  legend("topleft", unlist(spr[1, columns], use.names = FALSE),
+         col = colors, lty = 1, bty = "n", cex = 0.72)
+}
+```
