@@ -5,16 +5,18 @@ output:
     toc: true
 ---
 
-This report accompanies Figure 2 on LSOPC intervention in the mouse model. Panels B and G are redrawn from the values used for the GraphPad Prism plots. Bars show mean ± SD, with individual observations overlaid. The report also displays the immunoblot quantification for F, the exported PCoA coordinates for H, and the exported LEfSe results for I. Keep the five Excel workbooks in the `data/` folder next to this Rmd and click **Knit** in RStudio.
+This report accompanies Figure 2 on LSOPC intervention in the mouse model. Panels B and G are redrawn from the values used for the GraphPad Prism plots. Bars show mean ± SD, with individual observations overlaid. The report also displays the immunoblot quantification for F, the exported PCoA coordinates for H, and the exported LEfSe results for I. Keep the five Excel workbooks in the same folder as this Rmd and click **Knit** in RStudio.
 
 ```{r setup, message=FALSE}
 library(readxl)
+# Shared utilities: this Rmd is knitted from Figure 2/.
+source("../scripts/plot_functions.R")
 
 groups <- c("Control", "AGEs", "L-LSOPC", "H-LSOPC")
-group_colors <- setNames(c("#D98391", "#EBA075", "#80B49E", "#6C9EBC"), groups)
+group_colors <- lsopc_group_colors[groups]
 
 source_path <- function(panel) {
-  path <- file.path("data", paste0("Figure 2", panel, ".xlsx"))
+  path <- paste0("Figure 2", panel, ".xlsx")
   if (!file.exists(path)) stop("Missing workbook: ", path, call. = FALSE)
   path
 }
@@ -53,9 +55,23 @@ unpack_rows <- function(block, n) {
 }
 ```
 
+## Data, units, and statistical interpretation
+
+The treatment-group palette is defined in `../scripts/plot_functions.R` and reused here. The workbook observations are summarized as **mean ± SD**; error bars and overlaid points are descriptive. This report does **not** independently perform normality testing, variance-homogeneity testing, one-way ANOVA, Tukey post hoc comparisons, or multiple-testing correction. Such results should be reported only when supported by the original statistical analysis and the manuscript Methods.
+
+| Panel | Displayed measurement | Observations in exported workbook | Analysis scope here |
+|:--|:--|:--|:--|
+| 2B | Organ index (mg/g) | 8 per group per organ | Mean ± SD; no inferential test rerun |
+| 2F | Immunoblot quantification (relative units as exported) | 3 per group per protein | Mean ± SD table |
+| 2G | Relative mRNA expression (dimensionless) | 3 per group per target | Mean ± SD; no inferential test rerun |
+| 2H | Unweighted UniFrac PCoA scores (dimensionless); axis variance (%) | 5 per group | Exported coordinates plotted; no ordination recalculation |
+| 2I | LEfSe LDA score, *p* and adjusted *p* values as exported | Exported taxa table | Tabulation only; LEfSe not rerun |
+
+The `n` above denotes the number of observations in the exported workbooks.
+
 ## Figure 2B | Organ indices
 
-[Figure 2B.xlsx](data/Figure%202B.xlsx). Each organ has eight measurements per group. The workbook label “Spieen” is displayed as “Spleen”.
+[Figure 2B.xlsx](Figure%202B.xlsx). Each organ has eight measurements per group. The workbook label “Spieen” is displayed as “Spleen”.
 
 ```{r organ-indices, fig.width=9, fig.height=4.8}
 organ <- read_block("B", "A3:AG7", c("text", rep("numeric", 32)))
@@ -65,7 +81,7 @@ plot_grouped(unpack_rows(organ, 8), organ_names, "Organ index (mg/g)")
 
 ## Figure 2F | Immunoblot quantification
 
-[Figure 2F.xlsx](data/Figure%202F.xlsx) contains three immunoblot quantification values per group for each of five proteins. The table below summarizes these values.
+[Figure 2F.xlsx](Figure%202F.xlsx) contains three immunoblot quantification values per group for each of five proteins. The table below summarizes these values.
 
 ```{r blot-quantification}
 blot <- read_block("F", "A3:M7", c("text", rep("numeric", 12)))
@@ -80,7 +96,7 @@ knitr::kable(data.frame(Protein = blot[[1]], blot_summary, check.names = FALSE),
 
 ## Figure 2G | Relative mRNA expression
 
-[Figure 2G.xlsx](data/Figure%202G.xlsx) contains relative expression values for three targets, with three observations per group per target.
+[Figure 2G.xlsx](Figure%202G.xlsx) contains relative expression values for three targets, with three observations per group per target.
 
 ```{r qpcr, fig.width=8, fig.height=4.8}
 qpcr <- read_block("G", "A3:E11", c("text", rep("numeric", 4)))
@@ -88,17 +104,17 @@ target_start <- seq(1, nrow(qpcr), by = 3)
 qpcr_values <- lapply(target_start, function(i) {
   as.matrix(qpcr[i + 0:2, 2:5])
 })
-plot_grouped(qpcr_values, qpcr[[1]][target_start], "Relative mRNA expression")
+plot_grouped(qpcr_values, qpcr[[1]][target_start], "Relative mRNA expression (fold change)")
 ```
 
 ## Figure 2H | Unweighted UniFrac PCoA
 
-[Figure 2H.xlsx](data/Figure%202H.xlsx) contains exported PCoA coordinates for five samples per group and the variance explained by each axis. The scatter plot uses the exported scores directly. Group assignment is read from the sample ID prefix.
+[Figure 2H.xlsx](Figure%202H.xlsx) contains exported PCoA coordinates for five samples per group and the variance explained by each axis. The scatter plot uses the exported scores directly (dimensionless ordination coordinates). Group assignment is read from the sample ID prefix.
 
-The original platform export shows the group ellipses. The R redraw below uses the Excel coordinates for the sample points and the axis percentages. Recomputing the ordination requires the Unweighted UniFrac distance matrix. Reproducing the original ellipses also requires the platform's ellipse settings.
+The original platform export shows the group ellipses. The R redraw below uses the Excel coordinates for the sample points and the axis percentages. The ordination and ellipse parameters are not recalculated in this report.
 
 ```{r pcoa-original, echo=FALSE, out.width="100%", fig.cap="Figure 2H. Original Unweighted UniFrac PCoA plot with group ellipses."}
-pcoa_image <- file.path("data", "PCoA_unweighted_unifrac_ellipse.png")
+pcoa_image <- "PCoA_unweighted_unifrac_ellipse.png"
 if (file.exists(pcoa_image)) {
   knitr::include_graphics(pcoa_image)
 }
@@ -123,12 +139,12 @@ legend("bottomleft", groups, col = group_colors, pch = 19, bty = "n", cex = 0.8)
 
 ## Figure 2I | LEfSe results
 
-[Figure 2I.xlsx](data/Figure%202I.xlsx) contains the exported LEfSe results at the phylum, class, order, family, and genus levels. The analysis report specifies an LDA score cutoff of 2. The tables below give the taxonomy, group code, LDA score, P value, and adjusted P value for each reported taxon. Group codes A–D match the exported cladogram legend.
+[Figure 2I.xlsx](Figure%202I.xlsx) contains the exported LEfSe results at the phylum, class, order, family, and genus levels. The analysis report specifies an LDA score cutoff of 2. The tables below give the taxonomy, group code, LDA score, P value, and adjusted P value for each reported taxon. Group codes A–D should be checked against the original cladogram legend before assigning treatment names.
 
-The cladogram is the original analysis output. The workbook documents the highlighted taxa and their scores. Re-running LEfSe requires the original abundance data and sample group assignments.
+The cladogram, when the original PNG is supplied, is the original analysis output. The workbook documents the highlighted taxa and their scores. Re-running LEfSe requires the original abundance data and sample group assignments.
 
 ```{r lefse-cladogram, echo=FALSE, out.width="100%", fig.cap="Figure 2I. Original LEfSe cladogram (LDA score cutoff of 2)."}
-cladogram_path <- file.path("data", "LDA_2_cladogram.png")
+cladogram_path <- "LDA_2_cladogram.png"
 if (file.exists(cladogram_path)) {
   knitr::include_graphics(cladogram_path)
 }
